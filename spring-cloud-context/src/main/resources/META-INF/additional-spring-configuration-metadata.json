@@ -45,14 +45,13 @@
 		{
 			"name": "spring.cloud.refresh.extra-refreshable",
 			"type": "java.util.Set<java.lang.String>",
-			"description": "Additional bean names or class names for beans to post process into refresh scope.",
-			"defaultValue": true
+			"description": "Additional bean names or class names for beans to post process into refresh scope."
 		},
 		{
 			"name": "spring.cloud.refresh.never-refreshable",
 			"type": "java.lang.String",
-			"description": "Comma separated list of bean names or class names for beans to never be refreshed or rebound.",
-			"defaultValue": true
+			"description": "Comma separated list of bean names or class names for beans to never be refreshed or rebound. Setting this property replaces the default value.",
+			"defaultValue": "com.zaxxer.hikari.HikariDataSource"
 		},
 		{
 			"name": "spring.cloud.decrypt-environment-post-processor.enabled",

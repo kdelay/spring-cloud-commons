@@ -16,14 +16,20 @@
 
 package org.springframework.cloud.context.properties;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import javax.net.ssl.SSLContext;
 import javax.sql.DataSource;
 
+import com.jayway.jsonpath.JsonPath;
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+
+import org.springframework.context.support.GenericApplicationContext;
+import org.springframework.core.io.ClassPathResource;
 
 import static org.assertj.core.api.BDDAssertions.then;
 
@@ -64,6 +70,16 @@ public class ConfigurationPropertiesRebinderTests {
 		then(EntityManager.class.getClassLoader()).isNotNull();
 		then(this.rebinder.isResettableNestedType(EntityManager.class)).isFalse();
 		then(this.rebinder.isResettableNestedType(PostConstruct.class)).isFalse();
+	}
+
+	@Test
+	public void neverRefreshableMetadataDefaultMatchesRuntimeDefault() throws IOException {
+		this.rebinder.setApplicationContext(new GenericApplicationContext());
+		String metadata = new ClassPathResource("META-INF/additional-spring-configuration-metadata.json")
+			.getContentAsString(StandardCharsets.UTF_8);
+		List<Object> defaults = JsonPath.read(metadata,
+				"$.properties[?(@.name == 'spring.cloud.refresh.never-refreshable')].defaultValue");
+		then(defaults).containsExactly(String.join(",", this.rebinder.getNeverRefreshable()));
 	}
 
 	protected static class NestedProperties {
