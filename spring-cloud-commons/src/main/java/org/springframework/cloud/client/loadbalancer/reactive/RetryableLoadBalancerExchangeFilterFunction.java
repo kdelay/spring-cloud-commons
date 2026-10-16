@@ -19,6 +19,7 @@ package org.springframework.cloud.client.loadbalancer.reactive;
 import java.net.URI;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -46,7 +47,9 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.ExchangeFunction;
 
 import static org.springframework.cloud.client.loadbalancer.reactive.ExchangeFilterFunctionUtils.buildClientRequest;
+import static org.springframework.cloud.client.loadbalancer.reactive.ExchangeFilterFunctionUtils.completeOnce;
 import static org.springframework.cloud.client.loadbalancer.reactive.ExchangeFilterFunctionUtils.getHint;
+import static org.springframework.cloud.client.loadbalancer.reactive.ExchangeFilterFunctionUtils.requestCancelled;
 import static org.springframework.cloud.client.loadbalancer.reactive.ExchangeFilterFunctionUtils.serviceInstanceUnavailableMessage;
 
 /**
@@ -130,13 +133,17 @@ public class RetryableLoadBalancerExchangeFilterFunction implements LoadBalanced
 					stickySessionProperties.getInstanceIdCookieName(),
 					stickySessionProperties.isAddServiceInstanceCookie(), transformers);
 			supportedLifecycleProcessors.forEach(lifecycle -> lifecycle.onStartRequest(lbRequest, lbResponse));
+			AtomicBoolean completed = new AtomicBoolean();
 			return next.exchange(newRequest)
-				.doOnError(throwable -> supportedLifecycleProcessors.forEach(lifecycle -> lifecycle
-					.onComplete(new CompletionContext<ResponseData, ServiceInstance, RetryableRequestContext>(
-							CompletionContext.Status.FAILED, throwable, lbRequest, lbResponse))))
-				.doOnSuccess(clientResponse -> supportedLifecycleProcessors
-					.forEach(lifecycle -> lifecycle.onComplete(new CompletionContext<>(CompletionContext.Status.SUCCESS,
-							lbRequest, lbResponse, new ResponseData(clientResponse, requestData)))))
+				.doOnError(throwable -> completeOnce(completed, supportedLifecycleProcessors,
+						() -> new CompletionContext<ResponseData, ServiceInstance, RetryableRequestContext>(
+								CompletionContext.Status.FAILED, throwable, lbRequest, lbResponse)))
+				.doOnSuccess(clientResponse -> completeOnce(completed, supportedLifecycleProcessors,
+						() -> new CompletionContext<>(CompletionContext.Status.SUCCESS, lbRequest, lbResponse,
+								new ResponseData(clientResponse, requestData))))
+				.doOnCancel(() -> completeOnce(completed, supportedLifecycleProcessors,
+						() -> new CompletionContext<ResponseData, ServiceInstance, RetryableRequestContext>(
+								CompletionContext.Status.FAILED, requestCancelled(), lbRequest, lbResponse)))
 				.map(clientResponse -> {
 					loadBalancerRetryContext.setClientResponse(clientResponse);
 					if (shouldRetrySameServiceInstance(retryPolicy, loadBalancerRetryContext)) {

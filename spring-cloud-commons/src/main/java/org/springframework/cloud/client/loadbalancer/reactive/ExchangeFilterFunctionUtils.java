@@ -19,8 +19,14 @@ package org.springframework.cloud.client.loadbalancer.reactive;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.cloud.client.loadbalancer.CompletionContext;
+import org.springframework.cloud.client.loadbalancer.LoadBalancerLifecycle;
 import org.springframework.cloud.client.loadbalancer.LoadBalancerUriTools;
 import org.springframework.web.reactive.function.client.ClientRequest;
 import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
@@ -69,6 +75,23 @@ public final class ExchangeFilterFunctionUtils {
 
 	static String serviceInstanceUnavailableMessage(String serviceId) {
 		return "LoadBalancer does not contain an instance for the service " + serviceId;
+	}
+
+	/**
+	 * Notifies the lifecycle processors that the request has completed, unless they have
+	 * already been notified. A request can be cancelled after it has completed, for
+	 * example when an operator further down the chain fails on the response.
+	 */
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	static void completeOnce(AtomicBoolean completed, Set<LoadBalancerLifecycle> lifecycleProcessors,
+			Supplier<CompletionContext> completionContext) {
+		if (completed.compareAndSet(false, true)) {
+			lifecycleProcessors.forEach(lifecycle -> lifecycle.onComplete(completionContext.get()));
+		}
+	}
+
+	static CancellationException requestCancelled() {
+		return new CancellationException("Request cancelled before a response was received");
 	}
 
 }
